@@ -18,7 +18,12 @@ npm test             # quick checks
 Set `PORT` to use a different port. Other devices on your network can reach
 the site at `http://<this machine's IP>:8080`.
 
-## Put it online (Render, free)
+## Put it online
+
+**Your own server (used for weather.techx1.com):** see
+[deploy/HETZNER.md](deploy/HETZNER.md) for nginx, pm2 and HTTPS steps.
+
+### Alternative: Render (free)
 
 The repo includes a `render.yaml`, so Render can set everything up in one go.
 
