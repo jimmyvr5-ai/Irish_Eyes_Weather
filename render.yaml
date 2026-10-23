@@ -1,0 +1,17 @@
+# Render Blueprint: New > Blueprint in the Render dashboard picks this up.
+services:
+  - type: web
+    name: irish-weather
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeploy: true
+    domains:
+      - weather.techx1.com
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

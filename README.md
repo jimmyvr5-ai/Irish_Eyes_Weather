@@ -20,17 +20,29 @@ the site at `http://<this machine's IP>:8080`.
 
 ## Put it online (Render, free)
 
+The repo includes a `render.yaml`, so Render can set everything up in one go.
+
 1. Sign in at [render.com](https://render.com) with GitHub.
-2. Choose **New > Web Service** and pick this repository.
-3. Settings: Runtime **Node**, Build command `npm install`, Start command
-   `npm start`, Instance type **Free**.
-4. Create the service. Render sets `PORT` itself and gives you a
-   `https://<name>.onrender.com` address; add your own domain later under
-   **Settings > Custom Domains**.
+2. Choose **New > Blueprint**, pick this repository and click **Apply**.
+   This creates a free Node web service called `irish-weather` (Frankfurt,
+   Node 22, `npm install` / `npm start`) and adds the custom domain
+   `weather.techx1.com`. Render sets `PORT` itself.
+3. At your DNS provider for `techx1.com`, add a record:
+   **Type** `CNAME`, **Name/Host** `weather`, **Value/Target**
+   `irish-weather.onrender.com` (use the exact `.onrender.com` address
+   Render shows), TTL automatic or 300.
+4. In Render open the service, **Settings > Custom Domains**, and click
+   **Verify** next to `weather.techx1.com`. Render then issues a free HTTPS
+   certificate automatically, usually within minutes.
+
+Without the Blueprint: **New > Web Service**, pick the repo, Runtime **Node**,
+Build `npm install`, Start `npm start`, Instance type **Free**, then add the
+domain under **Settings > Custom Domains**.
 
 Each push to `main` redeploys automatically. Free services sleep after about
 15 minutes without visitors, so the first visit after a quiet spell takes
-around 30 seconds to wake up; a paid instance avoids that.
+around 30 to 60 seconds to wake up; the Starter instance (about $7/month)
+stays awake.
 
 ## Where the data comes from
 
