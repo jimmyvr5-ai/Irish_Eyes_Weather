@@ -1,0 +1,16 @@
+{
+  "name": "ireland-weather",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Automated Irish weather site: rain radar, current conditions, wind and 7-day forecasts from Met Éireann.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "mock": "node server.js --mock",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}

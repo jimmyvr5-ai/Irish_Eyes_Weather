@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ireland Weather</title>
+  <meta name="description" content="Live rain radar, current conditions, wind and 7-day forecasts for towns across Ireland, using Met Éireann data.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Ireland Weather</a>
+    <div class="picker">
+      <select id="town" aria-label="Choose a town"></select>
+      <button id="locate" type="button" title="Use my location">📍</button>
+    </div>
+  </header>
+
+  <section id="warnings" class="warnings" aria-live="polite" hidden></section>
+
+  <!-- Ad slot: header banner. Hidden until ads are switched on. -->
+  <div class="ad-slot ad-top" hidden></div>
+
+  <main class="layout">
+    <section class="map-wrap">
+      <div id="map"></div>
+      <div class="map-controls">
+        <div class="layers" role="group" aria-label="Map layer">
+          <button type="button" data-layer="radar" class="on">Rain</button>
+          <button type="button" data-layer="temp">Temperature</button>
+          <button type="button" data-layer="wind">Wind</button>
+        </div>
+        <div class="radar-bar" id="radarBar">
+          <button type="button" id="play" aria-label="Play radar">▶</button>
+          <input type="range" id="frame" min="0" max="0" value="0" aria-label="Radar time">
+          <span id="frameTime">–</span>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div id="current" class="card current"></div>
+      <div class="card">
+        <h2>Next 24 hours</h2>
+        <div id="hourly" class="hourly"></div>
+      </div>
+      <!-- Ad slot: sidebar. -->
+      <div class="ad-slot ad-side" hidden></div>
+      <div class="card">
+        <h2>7-day forecast</h2>
+        <div id="daily" class="daily"></div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    Forecasts, observations and warnings: <a href="https://www.met.ie" target="_blank" rel="noopener">Met Éireann</a> (CC BY 4.0).
+    Radar: <span id="radarCredit">–</span>.
+    Map: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>,
+    <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a>,
+    data <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>.
+  </footer>
+
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

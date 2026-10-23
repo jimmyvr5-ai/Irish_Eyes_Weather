@@ -1,0 +1,54 @@
+const test = require('node:test');
+const assert = require('node:assert');
+
+const { parseForecastXml } = require('../lib/metForecast');
+const { normalise } = require('../lib/warnings');
+const mock = require('./mockData');
+
+test('parses Met Éireann forecast XML into hourly and daily data', () => {
+  const fc = parseForecastXml(mock.forecastXml(53.35, -6.26));
+  assert.strictEqual(fc.hourly.length, 24 * 7);
+  const h = fc.hourly[0];
+  assert.strictEqual(typeof h.temperature, 'number');
+  assert.strictEqual(typeof h.windSpeedKmh, 'number');
+  assert.ok(h.symbol, 'hour has a weather symbol from its period row');
+  assert.ok(fc.daily.length >= 7);
+  for (const d of fc.daily) assert.ok(d.max >= d.min);
+});
+
+test('drops expired warnings and names counties', () => {
+  const list = normalise(mock.warnings());
+  assert.strictEqual(list.length, 1);
+  assert.deepStrictEqual(list[0].regions, ['Clare', 'Galway', 'Kerry', 'Mayo']);
+});
+
+test('API serves towns, forecast and warnings in mock mode', async () => {
+  process.env.MOCK = '1';
+  delete require.cache[require.resolve('../server')];
+  const { server } = require('../server');
+  await new Promise((r) => server.listen(0, r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const towns = await (await fetch(`${base}/api/towns`)).json();
+    assert.ok(towns.length > 20);
+    assert.strictEqual(typeof towns[0].now.temperature, 'number');
+
+    const fc = await (await fetch(`${base}/api/forecast?town=galway`)).json();
+    assert.strictEqual(fc.location, 'Galway');
+    assert.ok(fc.hourly.length > 0 && fc.daily.length === 7);
+
+    const bad = await fetch(`${base}/api/forecast?lat=40&lon=0`);
+    assert.strictEqual(bad.status, 400);
+
+    const warnings = await (await fetch(`${base}/api/warnings`)).json();
+    assert.strictEqual(warnings.length, 1);
+
+    const page = await fetch(`${base}/`);
+    assert.match(await page.text(), /Ireland Weather/);
+
+    const escape = await fetch(`${base}/..%2fserver.js`);
+    assert.notStrictEqual(escape.status, 200);
+  } finally {
+    server.close();
+  }
+});
