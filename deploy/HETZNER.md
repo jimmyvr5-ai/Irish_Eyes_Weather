@@ -7,6 +7,24 @@ weather.techx1.com traffic to it with HTTPS from Let's Encrypt.
 If your server uses Caddy or Docker instead of nginx, say so and the steps
 change slightly. The commands below assume Ubuntu or Debian and nginx.
 
+## Will it clash with news.techx1.com?
+
+No, you don't need another server. One server can run many sites. nginx
+looks at the name in each visitor's request and sends weather.techx1.com to
+the weather app and news.techx1.com to the news site. The two stay
+separate as long as:
+
+- **Each has its own port.** Weather uses 3005. Check nothing else uses it:
+  `sudo ss -tlnp` lists every port in use, and the news site's app will be on
+  one of them. If 3005 shows up, pick a free one (for example 3006) and change
+  it in `deploy/ecosystem.config.js` and `deploy/nginx-weather.conf`.
+- **Each has its own folder.** Weather goes in `/var/www/irish-weather`.
+- **Each has its own pm2 name.** Weather runs as `irish-weather`; `pm2 status`
+  shows both side by side.
+- **Each has its own nginx file.** You add a new file for weather and don't
+  edit the news one. `sudo nginx -t` checks both before anything is reloaded,
+  so a mistake can't take the news site down.
+
 ## 1. Point weather.techx1.com at the server (GoDaddy)
 
 1. In GoDaddy go to **My Products**, then **DNS** next to techx1.com.
@@ -59,9 +77,8 @@ pm2 startup                      # run the command it prints, once, so it surviv
 curl -I http://127.0.0.1:3005    # should say 200 OK
 ```
 
-Port 3005 is used so it doesn't clash with the news site. If something else
-already uses 3005 (`sudo ss -ltnp | grep 3005`), change the number in both
-`deploy/ecosystem.config.js` and `deploy/nginx-weather.conf`.
+Before this, run `sudo ss -tlnp | grep 3005`. No output means the port is
+free. If it shows something, change 3005 as described above.
 
 ## 5. nginx
 
