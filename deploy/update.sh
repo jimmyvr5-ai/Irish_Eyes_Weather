@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 # Pull the latest code from GitHub and restart the site.
+# Usage on the server: ~/irish-weather/deploy/update.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 git pull --ff-only origin main
-if docker ps --format '{{.Names}}' | grep -qx irish-weather; then
-  docker restart irish-weather
-else
-  npm install --omit=dev
-  pm2 restart irish-weather --update-env
-fi
+if command -v npm >/dev/null; then npm install --omit=dev; fi
+docker restart irish-weather
+echo "Updated. Check https://weather.techx1.com"

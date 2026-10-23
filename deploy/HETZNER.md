@@ -118,18 +118,20 @@ If certbot isn't installed: `sudo apt-get install -y certbot python3-certbot-ngi
 
 ## 7. Updating later
 
-Whenever new code is pushed to GitHub, run on the server:
+When a new version is pushed to GitHub, log in and run one command:
 
 ```bash
-/var/www/irish-weather/deploy/update.sh
+ssh root@2.28.52.229
+~/irish-weather/deploy/update.sh
 ```
 
-It pulls the latest code, installs anything new and restarts the site.
+It pulls the latest code, installs anything new and restarts the
+`irish-weather` container. The site is back within a few seconds.
 
 ## Handy commands
 
-- `pm2 status` shows whether it's running.
-- `pm2 logs irish-weather` shows its log.
-- `pm2 restart irish-weather` restarts it.
+- `docker ps` shows whether `irish-weather` is running.
+- `docker logs irish-weather --tail 50` shows its log.
+- `docker restart irish-weather` restarts it.
 
 `render.yaml` in the repo is only for Render hosting and is ignored here.
