@@ -36,8 +36,12 @@ function loadPlace() {
 
 async function api(path) {
   const res = await fetch(path);
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+  let body = null;
+  try { body = await res.json(); } catch { /* not JSON, e.g. a plain "Not found" */ }
+  if (res.status === 404 && !body) {
+    throw new Error('the server does not have this feature yet. Restart it (Ctrl+C, then npm start) and refresh the page');
+  }
+  if (!res.ok || body == null) throw new Error(body?.error || `the server answered HTTP ${res.status}`);
   return body;
 }
 
