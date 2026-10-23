@@ -36,9 +36,10 @@ body {
 a { color: var(--accent); }
 
 .topbar {
-  display: flex;
+  /* Brand on the left, town search centred on the page. */
+  display: grid;
+  grid-template-columns: 1fr minmax(0, 440px) 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 10px 16px;
   background: var(--card);
@@ -47,7 +48,15 @@ a { color: var(--accent); }
 
 .brand { font-weight: 700; font-size: 18px; color: var(--text); text-decoration: none; }
 
-.picker { display: flex; gap: 6px; margin: 0; flex: 0 1 360px; }
+.brand { justify-self: start; }
+
+.picker { display: flex; gap: 6px; margin: 0; }
+
+@media (max-width: 640px) {
+  .topbar { grid-template-columns: 1fr; justify-items: center; }
+  .brand { justify-self: center; }
+  .picker { width: 100%; }
+}
 
 .search { position: relative; flex: 1; }
 .search input {
