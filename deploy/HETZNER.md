@@ -9,10 +9,18 @@ change slightly. The commands below assume Ubuntu or Debian and nginx.
 
 > **Your server (2.28.52.229) uses Caddy in Docker, not nginx.** news.techx1.com
 > runs as the `world-news` Docker containers, with `world-news-caddy-1` handling
-> ports 80 and 443. For this server skip the nginx and certbot steps (5 and 6)
-> and instead add the block in `deploy/Caddyfile-weather` to that Caddy's
-> Caddyfile and reload it. Caddy sets up HTTPS itself. The app listens on
-> 0.0.0.0:3005 so the Caddy container can reach it at 172.17.0.1:3005.
+> ports 80 and 443. The server firewall blocks containers from reaching apps on
+> the host, so on this server the weather app runs as its own container on
+> Caddy's Docker network instead of under pm2, and steps 4 to 6 are replaced by:
+>
+> ```
+> NET=$(docker inspect world-news-caddy-1 --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}')
+> docker run -d --name irish-weather --restart unless-stopped --network $NET -v /root/irish-weather:/app -w /app -e PORT=3005 -e HOST=0.0.0.0 node:22-alpine node server.js
+> ```
+>
+> then adding `deploy/Caddyfile-weather` to Caddy's Caddyfile and running
+> `docker exec world-news-caddy-1 caddy reload --config /etc/caddy/Caddyfile`.
+> Caddy sets up HTTPS itself. `deploy/update.sh` restarts the container.
 
 ## Will it clash with news.techx1.com?
 
