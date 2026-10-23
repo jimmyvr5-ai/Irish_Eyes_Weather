@@ -39,6 +39,7 @@ around 30 seconds to wake up; a paid instance avoids that.
 | Forecasts, current conditions | Met Éireann forecast API | CC BY 4.0 plus Met Éireann's condition that public sites also show its warnings |
 | Warnings | Met Éireann warnings feed | Shown unchanged, expired ones removed |
 | Rain radar | RainViewer (for now) | Free API is personal/educational use only, max zoom 7, last 2 hours |
+| Temperature and wind map layers, values under the cursor | Open-Meteo, a 0.5° grid of 130 points over Ireland | CC BY 4.0; free API is non-commercial only and counts each point as a call (10,000 a day), cached 30 min |
 | Base map | OpenFreeMap "bright" style (MapLibre) | Free, no key, attribution required |
 | Town search | Built-in town list, then OpenStreetMap Nominatim | Free, max 1 request a second (the server queues and caches searches for a week) |
 
@@ -46,7 +47,8 @@ The server caches everything (forecasts 30 min, town summary 15 min,
 warnings and radar 5 min) and keeps serving the last good copy if a source
 is briefly down.
 
-**Before going public with ads**, switch radar away from RainViewer. The
+**Before going public with ads**, switch radar away from RainViewer and
+move the Open-Meteo grid (`lib/grid.js`) to a paid Open-Meteo plan. The
 plan is to add a Met Éireann radar provider in `lib/radar.js` (their radar
 is open data under CC BY 4.0) and set `RADAR_PROVIDER=meteireann`.
 
@@ -57,6 +59,7 @@ server.js            web server and /api/* routes
 lib/metForecast.js   Met Éireann forecast fetch and XML parsing
 lib/warnings.js      Met Éireann warnings
 lib/radar.js         radar providers (RainViewer today)
+lib/grid.js          Open-Meteo grid for the temperature and wind layers
 lib/towns.js         towns shown on the map
 lib/geocode.js       town search (any place on the island of Ireland)
 public/              the page itself (HTML, CSS, JS)

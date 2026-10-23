@@ -80,4 +80,31 @@ function radar() {
   return { provider: 'mock', attribution: 'Mock radar', maxZoom: 7, frames: [] };
 }
 
-module.exports = { forecastXml, warnings, radar };
+// Open-Meteo's multi-point answer for the map grid: smooth made-up fields,
+// warmer in the south, windier in the west, a band of rain in the middle.
+function openMeteoGrid(lats, lons) {
+  const now = Math.floor(Date.now() / 3600000) * 3600;
+  const rows = [];
+  for (const lat of lats) {
+    for (const lon of lons) {
+      rows.push({
+        latitude: lat,
+        longitude: lon,
+        current: {
+          time: now,
+          temperature_2m: 16 - (lat - 51.25) * 1.5 + Math.sin(lon) * 1.2,
+          wind_speed_10m: 12 + (-5 - lon) * 5,
+          wind_gusts_10m: 20 + (-5 - lon) * 8,
+          wind_direction_10m: 225 + (lat - 53.5) * 10,
+        },
+        hourly: {
+          time: [now, now + 3600],
+          precipitation: [0, Math.max(0, 2 - Math.abs(lat - 53.5) * 2)],
+        },
+      });
+    }
+  }
+  return rows;
+}
+
+module.exports = { forecastXml, warnings, radar, openMeteoGrid };

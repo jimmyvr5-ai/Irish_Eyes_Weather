@@ -15,6 +15,8 @@ const state = {
   radar: null,
   frame: 0,
   playing: null,
+  grid: null,
+  pointer: null,
 };
 
 // ---------- helpers ----------
@@ -77,6 +79,27 @@ function tempColour(t) {
   return stops[0][1];
 }
 
+// Smooth colour ramps for the gridded map layers: [value, [r, g, b]].
+const RAMPS = {
+  temp: { unit: '°C', stops: [[-5, [91, 75, 209]], [0, [59, 130, 214]], [5, [43, 179, 192]], [10, [63, 174, 90]], [15, [216, 180, 22]], [20, [239, 138, 31]], [25, [217, 58, 43]]] },
+  wind: { unit: 'km/h', stops: [[0, [190, 225, 245]], [15, [59, 160, 214]], [30, [63, 174, 90]], [45, [216, 180, 22]], [60, [239, 138, 31]], [80, [217, 58, 43]], [110, [140, 40, 140]]] },
+};
+
+function rampColour(ramp, v) {
+  const s = ramp.stops;
+  if (v <= s[0][0]) return s[0][1];
+  for (let i = 1; i < s.length; i++) {
+    if (v <= s[i][0]) {
+      const f = (v - s[i - 1][0]) / (s[i][0] - s[i - 1][0]);
+      return s[i - 1][1].map((c, k) => Math.round(c + (s[i][1][k] - c) * f));
+    }
+  }
+  return s[s.length - 1][1];
+}
+
+const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+const compass = (deg) => COMPASS[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16];
+
 function windColour(kmh) {
   if (kmh == null) return '#777';
   if (kmh >= 75) return '#d93a2b';
@@ -121,6 +144,187 @@ function renderMarkers() {
     state.markers.push(new maplibregl.Marker({ element: el }).setLngLat([t.lon, t.lat]).addTo(map));
   }
 }
+
+// ---------- gridded layers (temperature, wind) ----------
+
+// Value of one grid field at a point, blending the four surrounding grid
+// points. Returns null outside the grid or where data is missing.
+function gridValue(g, field, lat, lon) {
+  const step = g.lats[1] - g.lats[0];
+  const fi = (lat - g.lats[0]) / step;
+  const fj = (lon - g.lons[0]) / step;
+  if (fi < 0 || fj < 0 || fi > g.lats.length - 1 || fj > g.lons.length - 1) return null;
+  const i0 = Math.min(Math.floor(fi), g.lats.length - 2);
+  const j0 = Math.min(Math.floor(fj), g.lons.length - 2);
+  const di = fi - i0;
+  const dj = fj - j0;
+  const vals = g[field];
+  const at = (i, j) => vals[i * g.lons.length + j];
+  let sum = 0;
+  let wsum = 0;
+  for (const [i, j, w] of [[i0, j0, (1 - di) * (1 - dj)], [i0, j0 + 1, (1 - di) * dj], [i0 + 1, j0, di * (1 - dj)], [i0 + 1, j0 + 1, di * dj]]) {
+    const v = at(i, j);
+    if (v == null || w === 0) continue;
+    sum += v * w;
+    wsum += w;
+  }
+  return wsum > 0 ? sum / wsum : null;
+}
+
+// Wind direction is blended as a vector so that 350° and 10° average to 0°.
+function prepareGrid(g) {
+  g.windU = g.windSpeed.map((s, k) => (s == null || g.windDirection[k] == null ? null : s * Math.sin((g.windDirection[k] * Math.PI) / 180)));
+  g.windV = g.windSpeed.map((s, k) => (s == null || g.windDirection[k] == null ? null : s * Math.cos((g.windDirection[k] * Math.PI) / 180)));
+  return g;
+}
+
+function windAt(g, lat, lon) {
+  const speed = gridValue(g, 'windSpeed', lat, lon);
+  if (speed == null) return null;
+  const u = gridValue(g, 'windU', lat, lon);
+  const v = gridValue(g, 'windV', lat, lon);
+  const dir = u == null || v == null ? null : ((Math.atan2(u, v) * 180) / Math.PI + 360) % 360;
+  return { speed, gust: gridValue(g, 'windGust', lat, lon), dir };
+}
+
+const mercY = (lat) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+const unMercY = (y) => (360 / Math.PI) * Math.atan(Math.exp(y)) - 90;
+
+// Paint a field onto a canvas covering the grid. The map stretches the image
+// linearly in Web Mercator, so rows are spaced in Mercator, not in latitude.
+function paintField(g, field, ramp) {
+  const W = 240;
+  const H = 300;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  const west = g.lons[0];
+  const east = g.lons[g.lons.length - 1];
+  const yN = mercY(g.lats[g.lats.length - 1]);
+  const yS = mercY(g.lats[0]);
+  for (let y = 0; y < H; y++) {
+    const lat = unMercY(yN + ((yS - yN) * (y + 0.5)) / H);
+    for (let x = 0; x < W; x++) {
+      const lon = west + ((east - west) * (x + 0.5)) / W;
+      const v = gridValue(g, field, lat, lon);
+      if (v == null) continue;
+      const [r, gr, b] = rampColour(ramp, v);
+      const k = (y * W + x) * 4;
+      img.data[k] = r;
+      img.data[k + 1] = gr;
+      img.data[k + 2] = b;
+      img.data[k + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas.toDataURL();
+}
+
+const FIELD_FOR = { temp: 'temperature', wind: 'windSpeed' };
+
+function drawField() {
+  const g = state.grid;
+  const field = FIELD_FOR[state.layer];
+  const legend = document.getElementById('legend');
+  if (!field) {
+    legend.hidden = true;
+    if (map.getLayer('field')) map.setLayoutProperty('field', 'visibility', 'none');
+    return;
+  }
+  const ramp = RAMPS[state.layer];
+  const stops = ramp.stops;
+  legend.hidden = false;
+  document.getElementById('legendLo').textContent = `${stops[0][0]}`;
+  document.getElementById('legendHi').textContent = `${stops[stops.length - 1][0]} ${ramp.unit}`;
+  document.getElementById('legendBar').style.background =
+    `linear-gradient(to right, ${stops.map(([, c]) => `rgb(${c.join(',')})`).join(',')})`;
+  if (!g || !map.isStyleLoaded()) return;
+  const url = paintField(g, field, ramp);
+  const n = g.lats[g.lats.length - 1];
+  const s = g.lats[0];
+  const w = g.lons[0];
+  const e = g.lons[g.lons.length - 1];
+  const coordinates = [[w, n], [e, n], [e, s], [w, s]];
+  const src = map.getSource('field');
+  if (src) {
+    src.updateImage({ url, coordinates });
+  } else {
+    map.addSource('field', { type: 'image', url, coordinates });
+    // Under the first label layer, so town and road names stay readable.
+    const firstLabel = map.getStyle().layers.find((l) => l.type === 'symbol')?.id;
+    map.addLayer({ id: 'field', type: 'raster', source: 'field', paint: { 'raster-opacity': 0.55, 'raster-fade-duration': 0 } }, firstLabel);
+  }
+  map.setLayoutProperty('field', 'visibility', 'visible');
+}
+
+async function loadGrid() {
+  try {
+    state.grid = prepareGrid(await api('/api/grid'));
+  } catch (err) {
+    console.error(err);
+    return;
+  }
+  drawField();
+  updateReadout();
+}
+
+// ---------- readout under the cursor ----------
+
+function updateReadout() {
+  const box = document.getElementById('readout');
+  const p = state.pointer;
+  if (!p) { box.hidden = true; return; }
+  const g = state.grid;
+  const valueEl = document.getElementById('readoutValue');
+  const labelEl = document.getElementById('readoutLabel');
+  if (!g) {
+    box.hidden = false;
+    valueEl.textContent = '…';
+    labelEl.textContent = 'Loading map data';
+    return;
+  }
+  let value;
+  let label;
+  if (state.layer === 'temp') {
+    const t = gridValue(g, 'temperature', p.lat, p.lng);
+    if (t != null) {
+      value = `${Math.round(t)}<span class="unit">°C</span>`;
+      label = 'Temperature now';
+    }
+  } else if (state.layer === 'wind') {
+    const w = windAt(g, p.lat, p.lng);
+    if (w) {
+      // Arrow points downwind; the name says where it blows from.
+      const arrow = w.dir == null ? '' : `<span class="arrow" style="transform:rotate(${w.dir + 180}deg)">↑</span>`;
+      value = `${arrow}${Math.round(w.speed)}<span class="unit">km/h</span>`;
+      label = `Wind${w.dir == null ? '' : ` from the ${compass(w.dir)}`}${w.gust == null ? '' : ` · gusts ${Math.round(w.gust)} km/h`}`;
+    }
+  } else {
+    const r = gridValue(g, 'rain', p.lat, p.lng);
+    if (r != null) {
+      const mm = r < 0.05 ? '0' : r < 10 ? r.toFixed(1) : Math.round(r);
+      value = `${mm}<span class="unit">mm/h</span>`;
+      label = r < 0.05 ? 'No rain forecast this hour' : 'Rain this hour (forecast)';
+    }
+  }
+  box.hidden = value == null;
+  if (value != null) {
+    valueEl.innerHTML = value;
+    labelEl.textContent = label;
+  }
+}
+
+let readoutFrame = 0;
+function trackPointer(e) {
+  state.pointer = e.lngLat;
+  if (readoutFrame) return;
+  readoutFrame = requestAnimationFrame(() => { readoutFrame = 0; updateReadout(); });
+}
+map.on('mousemove', trackPointer);
+map.on('click', trackPointer); // touch screens have no hover
+map.getCanvasContainer().addEventListener('mouseleave', () => { state.pointer = null; updateReadout(); });
 
 // ---------- radar ----------
 
@@ -194,7 +398,9 @@ function setLayer(layer) {
   document.getElementById('radarBar').hidden = layer !== 'radar';
   if (layer !== 'radar' && state.playing) togglePlay();
   showFrame(state.frame);
+  drawField();
   renderMarkers();
+  updateReadout();
 }
 
 // ---------- forecast panel ----------
@@ -393,7 +599,9 @@ document.getElementById('locate').addEventListener('click', () => {
 loadWarnings();
 selectPlace(state.place, { fly: state.place.id !== DUBLIN.id });
 loadTowns().catch((e) => console.error(e));
+loadGrid();
 map.on('load', () => {
+  drawField();
   api('/api/radar').then(setupRadar).catch((e) => {
     console.error(e);
     document.getElementById('frameTime').textContent = 'Radar unavailable';
@@ -403,6 +611,7 @@ map.on('load', () => {
 // Keep things fresh while the page is open.
 setInterval(loadWarnings, 5 * 60 * 1000);
 setInterval(() => loadTowns().catch(() => {}), 15 * 60 * 1000);
+setInterval(loadGrid, 15 * 60 * 1000);
 setInterval(() => {
   if (!state.radar) return;
   api('/api/radar').then((r) => {

@@ -4,6 +4,7 @@ const assert = require('node:assert');
 const { parseForecastXml } = require('../lib/metForecast');
 const { normalise } = require('../lib/warnings');
 const geocode = require('../lib/geocode');
+const grid = require('../lib/grid');
 const mock = require('./mockData');
 
 test('parses Met Éireann forecast XML into hourly and daily data', () => {
@@ -36,6 +37,19 @@ test('place search keeps Irish settlements and drops the rest', () => {
   assert.strictEqual(geocode.dedupe([...geocode.localMatches('Cork'), { name: 'Cork', lat: 51.9, lon: -8.47 }]).length, 1);
 });
 
+test('turns Open-Meteo grid points into map fields', () => {
+  const { lats, lons } = grid.gridPoints();
+  assert.strictEqual(lats[0], 51.25);
+  assert.strictEqual(lons.at(-1), -5);
+  const url = new URL(grid.openMeteoUrl());
+  assert.strictEqual(url.searchParams.get('latitude').split(',').length, lats.length * lons.length);
+  const g = grid.parseOpenMeteo(mock.openMeteoGrid(lats, lons));
+  assert.strictEqual(g.temperature.length, lats.length * lons.length);
+  assert.ok(g.temperature[0] > g.temperature.at(-1), 'south warmer than north in mock');
+  assert.ok(g.rain.some((r) => r > 0));
+  assert.throws(() => grid.parseOpenMeteo([{}]));
+});
+
 test('API serves towns, forecast and warnings in mock mode', async () => {
   process.env.MOCK = '1';
   delete require.cache[require.resolve('../server')];
@@ -60,6 +74,9 @@ test('API serves towns, forecast and warnings in mock mode', async () => {
 
     const bad = await fetch(`${base}/api/forecast?lat=40&lon=0`);
     assert.strictEqual(bad.status, 400);
+
+    const g = await (await fetch(`${base}/api/grid`)).json();
+    assert.strictEqual(g.windSpeed.length, g.lats.length * g.lons.length);
 
     const warnings = await (await fetch(`${base}/api/warnings`)).json();
     assert.strictEqual(warnings.length, 1);

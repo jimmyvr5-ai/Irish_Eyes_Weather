@@ -14,6 +14,7 @@ const { fetchForecast, parseForecastXml } = require('./lib/metForecast');
 const { fetchWarnings, normalise } = require('./lib/warnings');
 const { getProvider } = require('./lib/radar');
 const geocode = require('./lib/geocode');
+const grid = require('./lib/grid');
 
 const PORT = Number(process.env.PORT) || 8080;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -30,6 +31,11 @@ const loadForecast = (lat, lon) =>
   MOCK ? Promise.resolve(parseForecastXml(mock.forecastXml(lat, lon))) : fetchForecast(lat, lon);
 const loadWarnings = () => (MOCK ? Promise.resolve(normalise(mock.warnings())) : fetchWarnings());
 const loadPlaces = (q) => (MOCK ? Promise.resolve([]) : geocode.nominatim(q));
+const loadGrid = () => {
+  if (!MOCK) return grid.fetchGrid();
+  const { lats, lons } = grid.gridPoints();
+  return Promise.resolve(grid.parseOpenMeteo(mock.openMeteoGrid(lats, lons)));
+};
 const loadRadar = () => (MOCK ? Promise.resolve(mock.radar()) : getProvider(RADAR_PROVIDER)());
 
 function forecastFor(lat, lon) {
@@ -80,6 +86,8 @@ const routes = {
   '/api/towns': async () => townsNow(),
   '/api/warnings': async () => cached('warnings', 5 * MIN, loadWarnings),
   '/api/radar': async () => cached('radar', 5 * MIN, loadRadar),
+  // Current temperature, wind and rain on a grid over Ireland, for map layers.
+  '/api/grid': async () => cached('grid', 30 * MIN, loadGrid),
   // Free-text place search, e.g. /api/search?q=ballyjamesduff
   '/api/search': async (q) => {
     const text = String(q.get('q') || '').trim().slice(0, 80);
