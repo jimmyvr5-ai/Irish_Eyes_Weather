@@ -7,6 +7,13 @@ weather.techx1.com traffic to it with HTTPS from Let's Encrypt.
 If your server uses Caddy or Docker instead of nginx, say so and the steps
 change slightly. The commands below assume Ubuntu or Debian and nginx.
 
+> **Your server (2.28.52.229) uses Caddy in Docker, not nginx.** news.techx1.com
+> runs as the `world-news` Docker containers, with `world-news-caddy-1` handling
+> ports 80 and 443. For this server skip the nginx and certbot steps (5 and 6)
+> and instead add the block in `deploy/Caddyfile-weather` to that Caddy's
+> Caddyfile and reload it. Caddy sets up HTTPS itself. The app listens on
+> 0.0.0.0:3005 so the Caddy container can reach it at 172.17.0.1:3005.
+
 ## Will it clash with news.techx1.com?
 
 No, you don't need another server. One server can run many sites. nginx

@@ -1,0 +1,7 @@
+# Add this to the Caddyfile used by the world-news Caddy container,
+# then reload: docker exec world-news-caddy-1 caddy reload --config /etc/caddy/Caddyfile
+# 172.17.0.1 is the Docker host, where pm2 runs the weather app on port 3005.
+# Caddy gets the HTTPS certificate by itself.
+weather.techx1.com {
+    reverse_proxy 172.17.0.1:3005
+}

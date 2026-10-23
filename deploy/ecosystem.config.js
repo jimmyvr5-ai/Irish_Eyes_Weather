@@ -4,6 +4,6 @@ module.exports = {
     name: 'irish-weather',
     script: 'server.js',
     cwd: __dirname + '/..',
-    env: { PORT: 3005, HOST: '127.0.0.1', NODE_ENV: 'production' },
+    env: { PORT: 3005, HOST: '0.0.0.0', NODE_ENV: 'production' },
   }],
 };
