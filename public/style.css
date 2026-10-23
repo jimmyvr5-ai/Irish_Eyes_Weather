@@ -47,7 +47,48 @@ a { color: var(--accent); }
 
 .brand { font-weight: 700; font-size: 18px; color: var(--text); text-decoration: none; }
 
-.picker { display: flex; gap: 6px; }
+.picker { display: flex; gap: 6px; margin: 0; flex: 0 1 360px; }
+
+.search { position: relative; flex: 1; }
+.search input {
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.search input:focus { outline: none; border-color: var(--accent); }
+.results {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
+}
+.results li { padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.results li .detail { color: var(--muted); font-size: 13px; margin-left: 6px; }
+.results li.active, .results li:hover { background: var(--accent-soft); }
+.results li.note { color: var(--muted); cursor: default; background: none; }
+
+/* Pin for the place whose forecast is showing. */
+.pin {
+  width: 18px;
+  height: 18px;
+  border-radius: 50% 50% 50% 0;
+  background: var(--red);
+  border: 2px solid #fff;
+  transform: rotate(-45deg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+}
 
 select, button {
   font: inherit;

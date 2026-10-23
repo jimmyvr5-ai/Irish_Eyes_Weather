@@ -12,10 +12,14 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/">Ireland Weather</a>
-    <div class="picker">
-      <select id="town" aria-label="Choose a town"></select>
+    <form class="picker" id="searchForm" role="search" autocomplete="off">
+      <div class="search">
+        <input id="search" type="search" placeholder="Search any town in Ireland" aria-label="Search for a town"
+               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="results">
+        <ul id="results" class="results" role="listbox" hidden></ul>
+      </div>
       <button id="locate" type="button" title="Use my location">📍</button>
-    </div>
+    </form>
   </header>
 
   <section id="warnings" class="warnings" aria-live="polite" hidden></section>

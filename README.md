@@ -39,7 +39,8 @@ around 30 seconds to wake up; a paid instance avoids that.
 | Forecasts, current conditions | Met Éireann forecast API | CC BY 4.0 plus Met Éireann's condition that public sites also show its warnings |
 | Warnings | Met Éireann warnings feed | Shown unchanged, expired ones removed |
 | Rain radar | RainViewer (for now) | Free API is personal/educational use only, max zoom 7, last 2 hours |
-| Base map | OpenFreeMap (MapLibre) | Free, no key, attribution required |
+| Base map | OpenFreeMap "bright" style (MapLibre) | Free, no key, attribution required |
+| Town search | Built-in town list, then OpenStreetMap Nominatim | Free, max 1 request a second (the server queues and caches searches for a week) |
 
 The server caches everything (forecasts 30 min, town summary 15 min,
 warnings and radar 5 min) and keeps serving the last good copy if a source
@@ -57,6 +58,7 @@ lib/metForecast.js   Met Éireann forecast fetch and XML parsing
 lib/warnings.js      Met Éireann warnings
 lib/radar.js         radar providers (RainViewer today)
 lib/towns.js         towns shown on the map
+lib/geocode.js       town search (any place on the island of Ireland)
 public/              the page itself (HTML, CSS, JS)
 test/                tests and mock data
 ```

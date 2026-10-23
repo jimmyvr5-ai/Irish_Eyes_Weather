@@ -3,6 +3,7 @@ const assert = require('node:assert');
 
 const { parseForecastXml } = require('../lib/metForecast');
 const { normalise } = require('../lib/warnings');
+const geocode = require('../lib/geocode');
 const mock = require('./mockData');
 
 test('parses Met Éireann forecast XML into hourly and daily data', () => {
@@ -22,6 +23,19 @@ test('drops expired warnings and names counties', () => {
   assert.deepStrictEqual(list[0].regions, ['Clare', 'Galway', 'Kerry', 'Mayo']);
 });
 
+test('place search keeps Irish settlements and drops the rest', () => {
+  const rows = [
+    { lat: '53.95', lon: '-7.12', addresstype: 'village', name: 'Ballyjamesduff', address: { village: 'Ballyjamesduff', county: 'County Cavan' } },
+    { lat: '51.50', lon: '-0.12', addresstype: 'city', name: 'London', address: { city: 'London' } },
+    { lat: '53.30', lon: '-6.20', addresstype: 'shop', name: 'Ballyjamesduff Stores', address: { suburb: 'Ranelagh', county: 'Dublin' } },
+  ];
+  const out = geocode.parseNominatim(rows);
+  assert.strictEqual(out.length, 2);
+  assert.deepStrictEqual(out[0], { name: 'Ballyjamesduff', detail: 'County Cavan', lat: 53.95, lon: -7.12 });
+  assert.strictEqual(geocode.localMatches('kilk')[0].name, 'Kilkenny');
+  assert.strictEqual(geocode.dedupe([...geocode.localMatches('Cork'), { name: 'Cork', lat: 51.9, lon: -8.47 }]).length, 1);
+});
+
 test('API serves towns, forecast and warnings in mock mode', async () => {
   process.env.MOCK = '1';
   delete require.cache[require.resolve('../server')];
@@ -36,6 +50,13 @@ test('API serves towns, forecast and warnings in mock mode', async () => {
     const fc = await (await fetch(`${base}/api/forecast?town=galway`)).json();
     assert.strictEqual(fc.location, 'Galway');
     assert.ok(fc.hourly.length > 0 && fc.daily.length === 7);
+
+    const named = await (await fetch(`${base}/api/forecast?lat=53.95&lon=-7.12&name=Ballyjamesduff`)).json();
+    assert.strictEqual(named.location, 'Ballyjamesduff');
+
+    const found = await (await fetch(`${base}/api/search?q=gal`)).json();
+    assert.strictEqual(found[0].name, 'Galway');
+    assert.deepStrictEqual(await (await fetch(`${base}/api/search?q=g`)).json(), []);
 
     const bad = await fetch(`${base}/api/forecast?lat=40&lon=0`);
     assert.strictEqual(bad.status, 400);

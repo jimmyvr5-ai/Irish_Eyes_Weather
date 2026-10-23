@@ -1,14 +1,17 @@
 // Front end: map with radar and town markers, forecast panel, warnings.
 
 const IRELAND = { center: [-7.9, 53.45], zoom: 6 };
-const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
+// "bright" is OpenFreeMap's colourful style (green land, blue sea); positron was greyscale.
+const MAP_STYLE = 'https://tiles.openfreemap.org/styles/bright';
+const DUBLIN = { id: 'dublin', name: 'Dublin', lat: 53.3498, lon: -6.2603 };
 const TZ = 'Europe/Dublin';
 
 const state = {
   layer: 'radar',
   towns: [],
   markers: [],
-  selected: localGet('town') || 'dublin',
+  place: loadPlace(),
+  pin: null,
   radar: null,
   frame: 0,
   playing: null,
@@ -18,6 +21,16 @@ const state = {
 
 function localGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function localSet(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } }
+
+// The place whose forecast is showing: { id?, name, lat, lon }. Known towns
+// carry an id; places found by search or "my location" only have coordinates.
+function loadPlace() {
+  try {
+    const p = JSON.parse(localGet('place'));
+    if (p && Number.isFinite(p.lat) && Number.isFinite(p.lon)) return p;
+  } catch { /* fall through */ }
+  return DUBLIN;
+}
 
 async function api(path) {
   const res = await fetch(path);
@@ -93,7 +106,7 @@ function renderMarkers() {
   for (const t of state.towns) {
     const n = t.now || {};
     const el = document.createElement('div');
-    el.className = 'marker' + (t.id === state.selected ? ' selected' : '');
+    el.className = 'marker' + (t.id === state.place.id ? ' selected' : '');
     el.title = t.name;
     if (state.layer === 'temp') {
       el.style.background = tempColour(n.temperature);
@@ -104,7 +117,7 @@ function renderMarkers() {
       const rot = (n.windDirection ?? 0) + 180;
       el.innerHTML = `<span class="arrow" style="transform:rotate(${rot}deg)">↑</span>${round(n.windSpeedKmh)}`;
     }
-    el.addEventListener('click', () => selectTown(t.id));
+    el.addEventListener('click', () => selectPlace(t));
     state.markers.push(new maplibregl.Marker({ element: el }).setLngLat([t.lon, t.lat]).addTo(map));
   }
 }
@@ -127,6 +140,7 @@ function setupRadar(radar) {
       id: radarLayerId(i),
       type: 'raster',
       source: radarLayerId(i),
+      layout: { visibility: 'none' },
       paint: { 'raster-opacity': 0, 'raster-opacity-transition': { duration: 0 }, 'raster-fade-duration': 0 },
     });
   });
@@ -135,6 +149,10 @@ function setupRadar(radar) {
   showFrame(radar.frames.length - 1);
 }
 
+// Only the frame on screen (plus the next one while playing, so it is ready)
+// is switched on. Layers that are merely transparent still download and draw
+// every tile, so with ~13 radar frames each pan or zoom used to fetch and
+// render 13 sets of tiles, which is what made the map slow to move.
 function showFrame(i) {
   const r = state.radar;
   if (!r || !r.frames.length) {
@@ -142,9 +160,13 @@ function showFrame(i) {
     return;
   }
   state.frame = i;
+  const n = r.frames.length;
+  const next = state.playing ? (i + 1) % n : -1;
   r.frames.forEach((_, j) => {
-    const visible = state.layer === 'radar' && j === i;
-    map.setPaintProperty(radarLayerId(j), 'raster-opacity', visible ? 0.75 : 0);
+    const on = state.layer === 'radar' && (j === i || j === next);
+    const id = radarLayerId(j);
+    map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+    map.setPaintProperty(id, 'raster-opacity', on && j === i ? 0.75 : 0);
   });
   document.getElementById('frame').value = i;
   document.getElementById('frameTime').textContent = fmtTime(r.frames[i].time);
@@ -156,6 +178,7 @@ function togglePlay() {
     clearInterval(state.playing);
     state.playing = null;
     btn.textContent = '▶';
+    showFrame(state.frame);
     return;
   }
   btn.textContent = '⏸';
@@ -176,13 +199,108 @@ function setLayer(layer) {
 
 // ---------- forecast panel ----------
 
-async function selectTown(id) {
-  state.selected = id;
-  localSet('town', id);
-  document.getElementById('town').value = id;
+async function selectPlace(place, { fly = true } = {}) {
+  state.place = { id: place.id, name: place.name, lat: place.lat, lon: place.lon };
+  localSet('place', JSON.stringify(state.place));
+  document.getElementById('search').value = '';
   renderMarkers();
-  await loadForecast(`/api/forecast?town=${encodeURIComponent(id)}`);
+  if (!state.pin) {
+    const el = document.createElement('div');
+    el.className = 'pin';
+    state.pin = new maplibregl.Marker({ element: el, anchor: 'bottom' });
+  }
+  state.pin.setLngLat([place.lon, place.lat]).addTo(map);
+  if (fly) map.flyTo({ center: [place.lon, place.lat], zoom: Math.max(map.getZoom(), 8), speed: 1.4 });
+  const q = place.id
+    ? `town=${encodeURIComponent(place.id)}`
+    : `lat=${place.lat}&lon=${place.lon}&name=${encodeURIComponent(place.name || '')}`;
+  await loadForecast(`/api/forecast?${q}`);
 }
+
+// ---------- town search ----------
+
+const search = {
+  input: document.getElementById('search'),
+  list: document.getElementById('results'),
+  items: [],
+  active: -1,
+  timer: null,
+  seq: 0,
+};
+
+function showResults(items, note) {
+  search.items = items;
+  search.active = items.length ? 0 : -1;
+  const html = items.map((p, i) => `
+    <li role="option" id="res-${i}" data-i="${i}"${i === 0 ? ' class="active" aria-selected="true"' : ''}>
+      ${esc(p.name)}${p.detail ? `<span class="detail">${esc(p.detail)}</span>` : ''}
+    </li>`).join('');
+  search.list.innerHTML = html || (note ? `<li class="note">${esc(note)}</li>` : '');
+  const open = Boolean(html || note);
+  search.list.hidden = !open;
+  search.input.setAttribute('aria-expanded', String(open));
+}
+
+function closeResults() {
+  search.list.hidden = true;
+  search.input.setAttribute('aria-expanded', 'false');
+}
+
+function moveActive(step) {
+  if (!search.items.length) return;
+  search.active = (search.active + step + search.items.length) % search.items.length;
+  search.list.querySelectorAll('li').forEach((li, i) => {
+    li.classList.toggle('active', i === search.active);
+    li.setAttribute('aria-selected', String(i === search.active));
+  });
+}
+
+async function runSearch(text) {
+  const seq = ++search.seq;
+  try {
+    const items = await api(`/api/search?q=${encodeURIComponent(text)}`);
+    if (seq !== search.seq) return; // a newer search has started
+    showResults(items, `No place called "${text}" found in Ireland`);
+  } catch (err) {
+    if (seq === search.seq) showResults([], err.message);
+  }
+}
+
+function pick(i) {
+  const p = search.items[i];
+  if (!p) return;
+  closeResults();
+  search.input.blur();
+  selectPlace(p);
+}
+
+search.input.addEventListener('input', () => {
+  clearTimeout(search.timer);
+  const text = search.input.value.trim();
+  if (text.length < 2) { search.seq++; closeResults(); return; }
+  search.timer = setTimeout(() => runSearch(text), 350);
+});
+search.input.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); moveActive(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); moveActive(-1); }
+  else if (e.key === 'Escape') closeResults();
+});
+document.getElementById('searchForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = search.input.value.trim();
+  if (text.length < 2) return;
+  // Enter before the suggestions arrive: search now, then take the best match.
+  if (search.list.hidden || !search.items.length) {
+    clearTimeout(search.timer);
+    await runSearch(text);
+  }
+  pick(Math.max(0, search.active));
+});
+search.list.addEventListener('mousedown', (e) => {
+  const li = e.target.closest('li[data-i]');
+  if (li) { e.preventDefault(); pick(Number(li.dataset.i)); }
+});
+search.input.addEventListener('blur', () => setTimeout(closeResults, 150));
 
 async function loadForecast(url) {
   const cur = document.getElementById('current');
@@ -258,28 +376,22 @@ async function loadWarnings() {
 
 async function loadTowns() {
   state.towns = await api('/api/towns');
-  const sel = document.getElementById('town');
-  sel.innerHTML = [...state.towns].sort((a, b) => a.name.localeCompare(b.name))
-    .map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
-  if (!state.towns.some((t) => t.id === state.selected)) state.selected = 'dublin';
-  sel.value = state.selected;
   renderMarkers();
 }
 
 document.querySelectorAll('.layers button').forEach((b) => b.addEventListener('click', () => setLayer(b.dataset.layer)));
 document.getElementById('play').addEventListener('click', togglePlay);
 document.getElementById('frame').addEventListener('input', (e) => showFrame(Number(e.target.value)));
-document.getElementById('town').addEventListener('change', (e) => selectTown(e.target.value));
 document.getElementById('locate').addEventListener('click', () => {
   if (!navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition(
-    (p) => loadForecast(`/api/forecast?lat=${p.coords.latitude}&lon=${p.coords.longitude}`),
+    (p) => selectPlace({ name: 'Your location', lat: p.coords.latitude, lon: p.coords.longitude }),
     () => alert('Could not get your location.')
   );
 });
 
 loadWarnings();
-selectTown(state.selected);
+selectPlace(state.place, { fly: state.place.id !== DUBLIN.id });
 loadTowns().catch((e) => console.error(e));
 map.on('load', () => {
   api('/api/radar').then(setupRadar).catch((e) => {

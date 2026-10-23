@@ -13,6 +13,7 @@ const { cached } = require('./lib/cache');
 const { fetchForecast, parseForecastXml } = require('./lib/metForecast');
 const { fetchWarnings, normalise } = require('./lib/warnings');
 const { getProvider } = require('./lib/radar');
+const geocode = require('./lib/geocode');
 
 const PORT = Number(process.env.PORT) || 8080;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -28,6 +29,7 @@ if (MOCK) mock = require('./test/mockData');
 const loadForecast = (lat, lon) =>
   MOCK ? Promise.resolve(parseForecastXml(mock.forecastXml(lat, lon))) : fetchForecast(lat, lon);
 const loadWarnings = () => (MOCK ? Promise.resolve(normalise(mock.warnings())) : fetchWarnings());
+const loadPlaces = (q) => (MOCK ? Promise.resolve([]) : geocode.nominatim(q));
 const loadRadar = () => (MOCK ? Promise.resolve(mock.radar()) : getProvider(RADAR_PROVIDER)());
 
 function forecastFor(lat, lon) {
@@ -78,6 +80,20 @@ const routes = {
   '/api/towns': async () => townsNow(),
   '/api/warnings': async () => cached('warnings', 5 * MIN, loadWarnings),
   '/api/radar': async () => cached('radar', 5 * MIN, loadRadar),
+  // Free-text place search, e.g. /api/search?q=ballyjamesduff
+  '/api/search': async (q) => {
+    const text = String(q.get('q') || '').trim().slice(0, 80);
+    if (text.length < 2) return [];
+    const local = geocode.localMatches(text);
+    let remote = [];
+    try {
+      remote = await cached(`geo:${text.toLowerCase()}`, 7 * 24 * 60 * MIN, () => loadPlaces(text));
+    } catch (err) {
+      console.warn(`[search] ${text}: ${err.message}`);
+      if (!local.length) throw Object.assign(new Error('Place search is unavailable just now'), { status: 502 });
+    }
+    return geocode.dedupe([...local, ...remote]);
+  },
   '/api/forecast': async (q) => {
     let lat = parseFloat(q.get('lat'));
     let lon = parseFloat(q.get('lon'));
@@ -91,7 +107,7 @@ const routes = {
     }
     const fc = await forecastFor(lat, lon);
     return {
-      location: town ? town.name : null,
+      location: town ? town.name : String(q.get('name') || '').slice(0, 80) || null,
       lat,
       lon,
       now: currentHour(fc.hourly),
