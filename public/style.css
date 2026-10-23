@@ -251,6 +251,14 @@ button:hover, select:hover { border-color: var(--accent); }
 .marker .arrow { display: inline-block; }
 .marker.selected { outline: 2px solid #fff; outline-offset: 1px; }
 
+/* Written forecasts, under the map */
+.texts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.text-fc h2 { margin-bottom: 4px; }
+.text-fc .issued, .text-fc .muted { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+.text-fc h3 { font-size: 14px; margin: 10px 0 2px; }
+.text-fc p { margin: 0; }
+.text-fc .note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+
 /* Side panel */
 .panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-content: start; min-width: 0; }
 

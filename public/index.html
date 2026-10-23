@@ -39,6 +39,7 @@
           <button type="button" data-layer="radar" class="on">Rain</button>
           <button type="button" data-layer="wind">Wind</button>
           <button type="button" data-layer="temp">Temperature</button>
+          <button type="button" data-layer="cloud">Cloud</button>
         </div>
         <div class="legend" id="legend" hidden>
           <span id="legendLo"></span><span class="bar" id="legendBar"></span><span id="legendHi"></span>
@@ -52,6 +53,12 @@
     </section>
 
     <section id="warnings" class="warnings" aria-live="polite" hidden></section>
+
+    <!-- Written forecasts: Ireland, and the province of the chosen place. -->
+    <section class="texts">
+      <article class="card text-fc" id="textNational"><h2>Ireland forecast</h2><p class="muted">Loading…</p></article>
+      <article class="card text-fc" id="textRegional"><h2>Provincial forecast</h2><p class="muted">Loading…</p></article>
+    </section>
     </div>
 
     <aside class="panel">
@@ -72,7 +79,7 @@
   <footer class="footer">
     Forecasts, observations and warnings: <a href="https://www.met.ie" target="_blank" rel="noopener">Met Éireann</a> (CC BY 4.0).
     Radar: <span id="radarCredit">–</span>.
-    Temperature and wind map: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0).
+    Temperature, wind and cloud map: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0).
     Map: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>,
     <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a>,
     data <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>.

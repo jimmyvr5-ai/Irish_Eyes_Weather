@@ -82,6 +82,8 @@ function tempColour(t) {
 // Smooth colour ramps for the gridded map layers: [value, [r, g, b]].
 const RAMPS = {
   temp: { unit: '°C', stops: [[-5, [91, 75, 209]], [0, [59, 130, 214]], [5, [43, 179, 192]], [10, [63, 174, 90]], [15, [216, 180, 22]], [20, [239, 138, 31]], [25, [217, 58, 43]]] },
+  // Clear sky is see-through; thicker cloud is whiter and more opaque.
+  cloud: { unit: '%', alpha: true, stops: [[0, [240, 244, 248]], [50, [215, 222, 230]], [100, [150, 160, 172]]] },
   wind: { unit: 'km/h', stops: [[0, [190, 225, 245]], [15, [59, 160, 214]], [30, [63, 174, 90]], [45, [216, 180, 22]], [60, [239, 138, 31]], [80, [217, 58, 43]], [110, [140, 40, 140]]] },
 };
 
@@ -134,6 +136,9 @@ function renderMarkers() {
     if (state.layer === 'temp') {
       el.style.background = tempColour(n.temperature);
       el.textContent = `${round(n.temperature)}°`;
+    } else if (state.layer === 'cloud') {
+      el.style.background = n.cloudiness == null ? '#777' : n.cloudiness >= 70 ? '#6b7682' : n.cloudiness >= 30 ? '#8fa3b5' : '#3b82d6';
+      el.textContent = `${round(n.cloudiness)}%`;
     } else {
       el.style.background = windColour(n.windGustKmh ?? n.windSpeedKmh);
       // Wind direction is where it blows FROM, so point the arrow downwind.
@@ -215,14 +220,14 @@ function paintField(g, field, ramp) {
       img.data[k] = r;
       img.data[k + 1] = gr;
       img.data[k + 2] = b;
-      img.data[k + 3] = 255;
+      img.data[k + 3] = ramp.alpha ? Math.round(40 + 215 * Math.min(1, Math.max(0, v / 100))) : 255;
     }
   }
   ctx.putImageData(img, 0, 0);
   return canvas.toDataURL();
 }
 
-const FIELD_FOR = { temp: 'temperature', wind: 'windSpeed' };
+const FIELD_FOR = { temp: 'temperature', wind: 'windSpeed', cloud: 'cloud' };
 
 function drawField() {
   const g = state.grid;
@@ -256,6 +261,7 @@ function drawField() {
     const firstLabel = map.getStyle().layers.find((l) => l.type === 'symbol')?.id;
     map.addLayer({ id: 'field', type: 'raster', source: 'field', paint: { 'raster-opacity': 0.55, 'raster-fade-duration': 0 } }, firstLabel);
   }
+  map.setPaintProperty('field', 'raster-opacity', ramp.alpha ? 0.85 : 0.55);
   map.setLayoutProperty('field', 'visibility', 'visible');
 }
 
@@ -300,6 +306,12 @@ function updateReadout() {
       const arrow = w.dir == null ? '' : `<span class="arrow" style="transform:rotate(${w.dir + 180}deg)">↑</span>`;
       value = `${arrow}${Math.round(w.speed)}<span class="unit">km/h</span>`;
       label = `Wind${w.dir == null ? '' : ` from the ${compass(w.dir)}`}${w.gust == null ? '' : ` · gusts ${Math.round(w.gust)} km/h`}`;
+    }
+  } else if (state.layer === 'cloud') {
+    const c = g.cloud ? gridValue(g, 'cloud', p.lat, p.lng) : null;
+    if (c != null) {
+      value = `${Math.round(c)}<span class="unit">%</span>`;
+      label = c < 15 ? 'Clear sky now' : c < 60 ? 'Cloud cover now · some breaks' : 'Cloud cover now';
     }
   } else {
     const r = gridValue(g, 'rain', p.lat, p.lng);
@@ -406,7 +418,7 @@ function setLayer(layer) {
 // ---------- forecast panel ----------
 
 async function selectPlace(place, { fly = true } = {}) {
-  state.place = { id: place.id, name: place.name, lat: place.lat, lon: place.lon };
+  state.place = { id: place.id, name: place.name, detail: place.detail, lat: place.lat, lon: place.lon };
   localSet('place', JSON.stringify(state.place));
   document.getElementById('search').value = '';
   renderMarkers();
@@ -420,7 +432,41 @@ async function selectPlace(place, { fly = true } = {}) {
   const q = place.id
     ? `town=${encodeURIComponent(place.id)}`
     : `lat=${place.lat}&lon=${place.lon}&name=${encodeURIComponent(place.name || '')}`;
+  loadText();
   await loadForecast(`/api/forecast?${q}`);
+}
+
+// ---------- written forecasts ----------
+
+function renderText(el, fc, heading) {
+  if (!fc) return;
+  const issued = fc.issued ? `Issued ${fmtWhen(fc.issued)} by Met Éireann` : '';
+  el.innerHTML = `
+    <h2>${esc(heading)}</h2>
+    ${issued ? `<p class="issued">${esc(issued)}</p>` : ''}
+    ${fc.sections.map((s) => `<h3>${esc(s.title)}</h3><p>${esc(s.text)}</p>`).join('')}
+    ${fc.source === 'auto' ? `<p class="note">Met Éireann's written forecast is unavailable just now, so this summary was made from the forecast for ${esc(fc.basedOn || 'a nearby town')}.</p>` : ''}`;
+}
+
+let textSeq = 0;
+async function loadText() {
+  const p = state.place;
+  const q = p.id
+    ? `town=${encodeURIComponent(p.id)}`
+    : `lat=${p.lat}&lon=${p.lon}&detail=${encodeURIComponent(p.detail || '')}`;
+  const seq = ++textSeq;
+  const nat = document.getElementById('textNational');
+  const reg = document.getElementById('textRegional');
+  try {
+    const t = await api(`/api/text?${q}`);
+    if (seq !== textSeq) return;
+    renderText(nat, t.national, 'Ireland forecast');
+    renderText(reg, t.regional, `${t.province} forecast`);
+  } catch (err) {
+    if (seq !== textSeq) return;
+    nat.innerHTML = `<h2>Ireland forecast</h2><p class="error">Could not load the written forecast: ${esc(err.message)}</p>`;
+    reg.innerHTML = '<h2>Provincial forecast</h2><p class="muted">Unavailable just now.</p>';
+  }
 }
 
 // ---------- town search ----------
@@ -610,6 +656,7 @@ map.on('load', () => {
 
 // Keep things fresh while the page is open.
 setInterval(loadWarnings, 5 * 60 * 1000);
+setInterval(loadText, 30 * 60 * 1000);
 setInterval(() => loadTowns().catch(() => {}), 15 * 60 * 1000);
 setInterval(loadGrid, 15 * 60 * 1000);
 setInterval(() => {

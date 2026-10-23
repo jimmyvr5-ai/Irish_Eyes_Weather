@@ -15,6 +15,7 @@ const { fetchWarnings, normalise } = require('./lib/warnings');
 const { getProvider } = require('./lib/radar');
 const geocode = require('./lib/geocode');
 const grid = require('./lib/grid');
+const textForecast = require('./lib/textForecast');
 
 const PORT = Number(process.env.PORT) || 8080;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -36,6 +37,8 @@ const loadGrid = () => {
   const { lats, lons } = grid.gridPoints();
   return Promise.resolve(grid.parseOpenMeteo(mock.openMeteoGrid(lats, lons)));
 };
+const loadText = (region) =>
+  MOCK ? Promise.resolve(textForecast.parseFeed(mock.textFeed(region))) : textForecast.fetchText(region);
 const loadRadar = () => (MOCK ? Promise.resolve(mock.radar()) : getProvider(RADAR_PROVIDER)());
 
 function forecastFor(lat, lon) {
@@ -82,6 +85,22 @@ async function townsNow() {
   });
 }
 
+// Town whose point forecast stands in when a written forecast is unavailable.
+const TEXT_STANDIN = { National: 'athlone', Leinster: 'portlaoise', Munster: 'limerick', Connacht: 'galway', Ulster: 'monaghan' };
+
+// Met Éireann's written forecast for a region; if the feed is down and no
+// earlier copy is cached, one is written from the stand-in town's forecast.
+async function textFor(region) {
+  try {
+    return await cached(`text:${region}`, 30 * MIN, () => loadText(region));
+  } catch (err) {
+    console.warn(`[text] ${region}: ${err.message} (writing one from point data)`);
+    const t = towns.find((x) => x.id === TEXT_STANDIN[region]);
+    const fc = await forecastFor(t.lat, t.lon);
+    return { ...textForecast.fromHourly(fc.hourly, region), basedOn: t.name };
+  }
+}
+
 const routes = {
   '/api/towns': async () => townsNow(),
   '/api/warnings': async () => cached('warnings', 5 * MIN, loadWarnings),
@@ -101,6 +120,15 @@ const routes = {
       if (!local.length) throw Object.assign(new Error('Place search is unavailable just now'), { status: 502 });
     }
     return geocode.dedupe([...local, ...remote]);
+  },
+  // National and provincial written forecasts for a place,
+  // e.g. /api/text?lat=53.95&lon=-7.12&detail=County%20Cavan or ?town=galway
+  '/api/text': async (q) => {
+    const town = towns.find((t) => t.id === q.get('town'));
+    const province = town?.province ||
+      textForecast.provinceFor({ lat: parseFloat(q.get('lat')), lon: parseFloat(q.get('lon')), detail: q.get('detail') }, towns);
+    const [national, regional] = await Promise.all([textFor('National'), textFor(province)]);
+    return { province, national, regional };
   },
   '/api/forecast': async (q) => {
     let lat = parseFloat(q.get('lat'));

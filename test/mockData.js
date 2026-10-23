@@ -96,6 +96,7 @@ function openMeteoGrid(lats, lons) {
           wind_speed_10m: 12 + (-5 - lon) * 5,
           wind_gusts_10m: 20 + (-5 - lon) * 8,
           wind_direction_10m: 225 + (lat - 53.5) * 10,
+          cloud_cover: Math.min(100, Math.max(0, 40 + (lat - 53.5) * 30 + (-6 - lon) * 8)),
         },
         hourly: {
           time: [now, now + 3600],
@@ -107,4 +108,20 @@ function openMeteoGrid(lats, lons) {
   return rows;
 }
 
-module.exports = { forecastXml, warnings, radar, openMeteoGrid };
+// Same shape as https://www.met.ie/Open_Data/json/National.json
+function textFeed(region) {
+  return {
+    forecasts: [{
+      regions: [
+        { region },
+        { issued: new Date().toISOString().replace(/\.\d+Z$/, 'Z') },
+        { today: `Sunny spells and scattered showers across ${region}. Highest temperatures of 10 to 13 degrees.` },
+        { tonight: 'Dry at first, then rain spreading from the west. Lowest temperatures of 4 to 7 degrees.' },
+        { tomorrow: 'Wet and windy in the morning, brighter with showers later. Highs of 12 to 14 degrees.' },
+        { outlook: region === 'National' ? 'Staying unsettled into next week.' : '' },
+      ],
+    }],
+  };
+}
+
+module.exports = { forecastXml, warnings, radar, openMeteoGrid, textFeed };

@@ -6,6 +6,8 @@ const { normalise } = require('../lib/warnings');
 const geocode = require('../lib/geocode');
 const grid = require('../lib/grid');
 const mock = require('./mockData');
+const textForecast = require('../lib/textForecast');
+const towns = require('../lib/towns');
 
 test('parses Met Éireann forecast XML into hourly and daily data', () => {
   const fc = parseForecastXml(mock.forecastXml(53.35, -6.26));
@@ -50,6 +52,27 @@ test('turns Open-Meteo grid points into map fields', () => {
   assert.throws(() => grid.parseOpenMeteo([{}]));
 });
 
+test('reads Met Éireann written forecasts and finds the province', () => {
+  const fc = textForecast.parseFeed(mock.textFeed('Leinster'));
+  assert.strictEqual(fc.region, 'Leinster');
+  assert.deepStrictEqual(fc.sections.map((s) => s.title), ['Today', 'Tonight', 'Tomorrow']);
+  assert.throws(() => textForecast.parseFeed({ forecasts: [] }));
+  assert.ok(towns.every((t) => textForecast.PROVINCES.includes(t.province)));
+  assert.strictEqual(textForecast.provinceFor({ lat: 53.95, lon: -7.12, detail: 'County Cavan' }, towns), 'Ulster');
+  assert.strictEqual(textForecast.provinceFor({ lat: 52.14, lon: -10.27 }, towns), 'Munster'); // Dingle
+  assert.strictEqual(textForecast.provinceFor({ lat: 53.52, lon: -9.96 }, towns), 'Connacht'); // Clifden
+  assert.strictEqual(textForecast.provinceFor({ lat: 54.6, lon: -5.93, detail: 'County Antrim' }, towns), 'Ulster');
+});
+
+test('writes a fallback text forecast from hourly data', () => {
+  const { hourly } = require('../lib/metForecast').parseForecastXml(mock.forecastXml(53.03, -7.3));
+  const fc = textForecast.fromHourly(hourly, 'Leinster');
+  assert.strictEqual(fc.source, 'auto');
+  assert.ok(fc.sections.length >= 2);
+  assert.ok(fc.sections.some((s) => s.key === 'tonight'));
+  for (const s of fc.sections) assert.match(s.text, /temperatures of around -?\d+°C/);
+});
+
 test('API serves towns, forecast and warnings in mock mode', async () => {
   process.env.MOCK = '1';
   delete require.cache[require.resolve('../server')];
@@ -77,6 +100,15 @@ test('API serves towns, forecast and warnings in mock mode', async () => {
 
     const g = await (await fetch(`${base}/api/grid`)).json();
     assert.strictEqual(g.windSpeed.length, g.lats.length * g.lons.length);
+
+    assert.strictEqual(g.cloud.length, g.lats.length * g.lons.length);
+
+    const text = await (await fetch(`${base}/api/text?town=cork`)).json();
+    assert.strictEqual(text.province, 'Munster');
+    assert.strictEqual(text.national.region, 'National');
+    assert.strictEqual(text.regional.region, 'Munster');
+    const text2 = await (await fetch(`${base}/api/text?lat=54.9&lon=-8.3&detail=County%20Donegal`)).json();
+    assert.strictEqual(text2.province, 'Ulster');
 
     const warnings = await (await fetch(`${base}/api/warnings`)).json();
     assert.strictEqual(warnings.length, 1);

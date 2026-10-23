@@ -37,9 +37,10 @@ around 30 seconds to wake up; a paid instance avoids that.
 | What | Source | Terms |
 | --- | --- | --- |
 | Forecasts, current conditions | Met Éireann forecast API | CC BY 4.0 plus Met Éireann's condition that public sites also show its warnings |
+| Written forecasts (Ireland and the four provinces: today, tonight, tomorrow) | Met Éireann open data text feeds (`Open_Data/json/National.json`, `Leinster.json`, …) | CC BY 4.0; cached 30 min. If a feed is down, a plainer summary is written from the Met Éireann point forecast for a town in that area, and labelled as such |
 | Warnings | Met Éireann warnings feed | Shown unchanged, expired ones removed |
 | Rain radar | RainViewer (for now) | Free API is personal/educational use only, max zoom 7, last 2 hours |
-| Temperature and wind map layers, values under the cursor | Open-Meteo, a 0.5° grid of 130 points over Ireland | CC BY 4.0; free API is non-commercial only and counts each point as a call (10,000 a day), cached 30 min |
+| Temperature, wind and cloud map layers, values under the cursor | Open-Meteo, a 0.5° grid of 130 points over Ireland | CC BY 4.0; free API is non-commercial only and counts each point as a call (10,000 a day), cached 30 min |
 | Base map | OpenFreeMap "bright" style (MapLibre) | Free, no key, attribution required |
 | Town search | Built-in town list, then OpenStreetMap Nominatim | Free, max 1 request a second (the server queues and caches searches for a week) |
 
@@ -59,8 +60,9 @@ server.js            web server and /api/* routes
 lib/metForecast.js   Met Éireann forecast fetch and XML parsing
 lib/warnings.js      Met Éireann warnings
 lib/radar.js         radar providers (RainViewer today)
-lib/grid.js          Open-Meteo grid for the temperature and wind layers
-lib/towns.js         towns shown on the map
+lib/grid.js          Open-Meteo grid for the temperature, wind and cloud layers
+lib/textForecast.js  Met Éireann written forecasts, province lookup, fallback text
+lib/towns.js         towns shown on the map, with their province
 lib/geocode.js       town search (any place on the island of Ireland)
 public/              the page itself (HTML, CSS, JS)
 test/                tests and mock data
